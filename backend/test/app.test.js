@@ -42,10 +42,13 @@ test('faz upload, lista e baixa um documento', async () => {
   assert.strictEqual(uploadedDocument.originalName, 'hello.txt');
   assert.strictEqual(uploadedDocument.size, 5);
   assert.strictEqual(uploadedDocument.owner, 'default');
+  assert.strictEqual(uploadedDocument.mimeType, 'text/plain');
+  assert.ok(Number.isFinite(Date.parse(uploadedDocument.uploadedAt)));
   assert.ok(uploadedDocument.id);
   assert.ok(uploadedDocument.uploadedAt);
   assert.strictEqual('filePath' in uploadedDocument, false);
   assert.strictEqual('storageName' in uploadedDocument, false);
+  assert.strictEqual(fs.readdirSync(storageDirectory).length, 1);
 
   const listResponse = await fetch(`${baseUrl}/documents`);
   assert.strictEqual(listResponse.status, 200);
@@ -54,6 +57,7 @@ test('faz upload, lista e baixa um documento', async () => {
 
   const downloadResponse = await fetch(`${baseUrl}/documents/${uploadedDocument.id}/download`);
   assert.strictEqual(downloadResponse.status, 200);
+  assert.strictEqual(downloadResponse.headers.get('content-type'), 'text/plain');
   assert.match(downloadResponse.headers.get('content-disposition'), /hello\.txt/);
   assert.strictEqual(await downloadResponse.text(), 'hello');
 });
@@ -65,6 +69,7 @@ test('retorna erros para upload inválido, arquivo acima do limite e documento i
     body: '{}',
   });
   assert.strictEqual(missingFileResponse.status, 400);
+  assert.strictEqual((await missingFileResponse.json()).error.code, 'BAD_REQUEST');
 
   const largeFileForm = new FormData();
   largeFileForm.append('file', new Blob(['x'.repeat(1025)]), 'large.txt');
@@ -73,7 +78,10 @@ test('retorna erros para upload inválido, arquivo acima do limite e documento i
     body: largeFileForm,
   });
   assert.strictEqual(largeFileResponse.status, 413);
+  assert.strictEqual((await largeFileResponse.json()).error.code, 'PAYLOAD_TOO_LARGE');
+  assert.strictEqual(fs.readdirSync(storageDirectory).length, 1);
 
   const missingDocumentResponse = await fetch(`${baseUrl}/documents/missing-id/download`);
   assert.strictEqual(missingDocumentResponse.status, 404);
+  assert.strictEqual((await missingDocumentResponse.json()).error.code, 'DOCUMENT_NOT_FOUND');
 });
